@@ -239,6 +239,7 @@ public class Bot {
     // ─────────────────────────────────────────────────────────────────────────
     // Process a list of jobs
     // ─────────────────────────────────────────────────────────────────────────
+
     private void processJobList(WebDriver driver, JavascriptExecutor js,
                                 String mainWindow, List<String> hrefs,
                                 List<String> titles, List<String> companies,
@@ -246,34 +247,121 @@ public class Bot {
             throws InterruptedException {
 
         for (int i = 0; i < hrefs.size(); i++) {
-            String title   = i < titles.size()   ? titles.get(i)   : "unknown";
-            String link    = hrefs.get(i);
-            String company = i < companies.size() ? companies.get(i) : "Unknown";
+
+            String title = i < titles.size()
+                    ? titles.get(i)
+                    : "unknown";
+
+            String link = hrefs.get(i);
+
+            String company = i < companies.size()
+                    ? companies.get(i)
+                    : "Unknown";
 
             // Strip query parameters to normalize the link
             String normalizedLink = link.split("\\?")[0];
+
             if (processedJobUrls.contains(normalizedLink)) {
-                System.out.println("Skipping [" + (i+1) + "/" + hrefs.size() + "]: Already processed in this run -> " + title);
+                System.out.println(
+                        "Skipping [" + (i + 1) + "/" + hrefs.size()
+                                + "]: Already processed -> " + title
+                );
                 continue;
             }
+
             processedJobUrls.add(normalizedLink);
 
-            /* ── TITLE FILTER — uncomment to enable ───────────────────────────
-            String rf = profile.getRole() != null
-                    ? profile.getRole().toLowerCase().replace("-"," ") : "";
-            if (!rf.isBlank() && !matchesRole(title, rf)) {
-                System.out.println("Skipping (filter): " + title); continue;
+
+            // ============================================================
+            // ROLE / DESIGNATION FILTER
+            // ============================================================
+            //
+            // Example:
+            //
+            // User role: Java Developer
+            //
+            // Java Developer                    -> ACCEPT
+            // Senior Java Developer             -> ACCEPT
+            // Java Developer - Backend          -> ACCEPT
+            // Java Developer - Spring Boot      -> ACCEPT
+            // Java Backend Developer            -> ACCEPT
+            //
+            // React Developer                   -> REJECT
+            // Angular Developer                 -> REJECT
+            // Python Developer                  -> REJECT
+            // Java Developer - React            -> REJECT
+            // Java Developer + React            -> REJECT
+            //
+            // Same logic works for other roles.
+            // ============================================================
+
+            String requestedRole = profile.getRole();
+
+            if (requestedRole != null && !requestedRole.isBlank()) {
+
+                if (!matchesRole(title, requestedRole)) {
+
+                    System.out.println(
+                            "Skipping [ROLE MISMATCH] -> " + title
+                                    + " | Requested role: " + requestedRole
+                    );
+
+                    tracker.add(new ApplicationResult(
+                            profile.getFullName(),
+                            title,
+                            company,
+                            link,
+                            null,
+                            Status.SKIPPED,
+                            "Job title does not match requested role: "
+                                    + requestedRole
+                    ));
+
+                    continue;
+                }
+
+                System.out.println(
+                        "Role matched -> " + title
+                                + " | Requested: " + requestedRole
+                );
             }
-            ─────────────────────────────────────────────────────────────────── */
 
-            System.out.println("Processing [" + (i+1) + "/" + hrefs.size() + "]: " + title);
 
-            if (!isSessionAlive(driver)) { System.out.println("Session lost."); return; }
+            // ============================================================
+            // SESSION CHECK
+            // ============================================================
 
-            applyAndTrack(driver, js, mainWindow, title, link, company, profile, tracker);
+            if (!isSessionAlive(driver)) {
+                System.out.println("Session lost.");
+                return;
+            }
+
+
+            // ============================================================
+            // ONLY NOW OPEN THE JOB
+            // ============================================================
+
+            System.out.println(
+                    "Processing [" + (i + 1) + "/" + hrefs.size()
+                            + "]: " + title
+            );
+
+            applyAndTrack(
+                    driver,
+                    js,
+                    mainWindow,
+                    title,
+                    link,
+                    company,
+                    profile,
+                    tracker
+            );
+
 
             if (stopRequested) {
-                System.out.println("⛔ Bot stop requested — halting job loop.");
+                System.out.println(
+                        "⛔ Bot stop requested — halting job loop."
+                );
                 return;
             }
 
@@ -696,10 +784,240 @@ public class Bot {
         System.out.println("Login done: " + profile.getNaukriEmail());
     }
 
-    // private boolean matchesRole(String title, String rf) {
-    //     for (String p : rf.split("[\\s-]+")) { if (p.length()>2 && title.contains(p)) return true; }
-    //     return false;
-    // }
+    private boolean matchesRole(String jobTitle, String requestedRole) {
+
+        if (jobTitle == null || jobTitle.isBlank()) {
+            return false;
+        }
+
+        if (requestedRole == null || requestedRole.isBlank()) {
+            return true;
+        }
+
+        String title = normalizeRoleText(jobTitle);
+        String role = normalizeRoleText(requestedRole);
+
+
+        // Exact match
+        if (title.equals(role)) {
+            return true;
+        }
+
+
+        // ------------------------------------------------------------
+        // Requested role words
+        // ------------------------------------------------------------
+
+        List<String> roleWords = Arrays.stream(role.split(" "))
+                .filter(word -> word.length() > 2)
+                .toList();
+
+        if (roleWords.isEmpty()) {
+            return true;
+        }
+
+
+        // Every meaningful word from requested role must exist
+        // in the job title.
+        for (String word : roleWords) {
+
+            if (!title.contains(word)) {
+                return false;
+            }
+        }
+
+
+        // ------------------------------------------------------------
+        // Reject hybrid roles
+        // ------------------------------------------------------------
+
+        String originalTitle = jobTitle.toLowerCase();
+        String originalRole = requestedRole.toLowerCase().trim();
+
+
+        // + React
+        // + Angular
+        // + Python
+        //
+        // / React
+        // / Angular
+        //
+        // & React
+        // & Angular
+        //
+        // with React
+        // and React
+        String[] hardSeparators = {
+                "+",
+                "/",
+                "&"
+        };
+
+        for (String separator : hardSeparators) {
+
+            int separatorIndex = originalTitle.indexOf(separator);
+
+            if (separatorIndex >= 0) {
+
+                String before = originalTitle
+                        .substring(0, separatorIndex)
+                        .trim();
+
+                String after = originalTitle
+                        .substring(separatorIndex + separator.length())
+                        .trim();
+
+                if (before.contains(originalRole)
+                        && !after.isBlank()) {
+
+                    return false;
+                }
+            }
+        }
+
+
+        // ------------------------------------------------------------
+        // Reject "with" / "and" combinations
+        // ------------------------------------------------------------
+
+        if (originalTitle.contains(" with ")
+                || originalTitle.contains(" and ")) {
+
+            if (originalTitle.contains(originalRole)) {
+                return false;
+            }
+        }
+
+
+        // ------------------------------------------------------------
+        // Check '-' and ':' suffixes
+        // ------------------------------------------------------------
+        //
+        // We allow useful role modifiers:
+        //
+        // Java Developer - Backend
+        // Java Developer - Spring Boot
+        // Java Developer - Full Stack
+        //
+        // But we don't want another completely different role/tech
+        // appended to it.
+        //
+        // This is handled by checking whether the requested role
+        // appears before the suffix.
+        // ------------------------------------------------------------
+
+        String[] suffixSeparators = {
+                " - ",
+                " : ",
+                " | "
+        };
+
+        for (String separator : suffixSeparators) {
+
+            int index = originalTitle.indexOf(separator);
+
+            if (index >= 0) {
+
+                String before = originalTitle
+                        .substring(0, index)
+                        .trim();
+
+                String after = originalTitle
+                        .substring(index + separator.length())
+                        .trim();
+
+                if (before.contains(originalRole)) {
+
+                    // Common descriptive modifiers are allowed.
+                    if (isAllowedRoleModifier(after)) {
+                        return true;
+                    }
+
+                    // Unknown additional designation/technology:
+                    // reject it.
+                    return false;
+                }
+            }
+        }
+
+
+        // ------------------------------------------------------------
+        // Normal role variation
+        // ------------------------------------------------------------
+        //
+        // Examples:
+        //
+        // Senior Java Developer
+        // Java Backend Developer
+        // Java Developer Spring Boot
+        //
+        // accepted because all requested role words exist.
+        // ------------------------------------------------------------
+
+        return true;
+    }
+
+    private boolean isAllowedRoleModifier(String modifier) {
+
+        if (modifier == null || modifier.isBlank()) {
+            return true;
+        }
+
+        String normalized = normalizeRoleText(modifier);
+
+        Set<String> allowedModifiers = new HashSet<>(Arrays.asList(
+                "backend",
+                "back end",
+                "frontend",
+                "front end",
+                "full stack",
+                "fullstack",
+                "software",
+                "application",
+                "web",
+                "mobile",
+                "remote",
+                "onsite",
+                "hybrid",
+                "development",
+                "developer",
+                "engineering",
+                "engineer",
+                "programmer",
+                "spring",
+                "spring boot"
+        ));
+
+        return allowedModifiers.contains(normalized);
+    }
+
+    private String normalizeRoleText(String text) {
+
+        if (text == null) {
+            return "";
+        }
+
+        return text
+                .toLowerCase()
+                .replaceAll("[^a-z0-9+#]+", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private boolean containsHybridSeparator(String title) {
+
+        if (title == null) {
+            return false;
+        }
+
+        String lower = title.toLowerCase();
+
+        return lower.contains("+")
+                || lower.contains("/")
+                || lower.contains("&")
+                || lower.contains(" with ")
+                || lower.contains(" and ");
+    }
 
     private String truncate(String s, int max) {
         if (s == null) return "";
