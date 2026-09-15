@@ -1125,6 +1125,9 @@ public class AnswerEngine {
 
         if (bestKey != null && bestScore > 0) {
             String r = fmt(bestVal);
+            if(r.equals("0")){
+                return profile.getKeySkills().contains(qSkillNorm) ? profile.getExp() : "0";
+            }
             System.out.println("[AnswerEngine] Skill match [score=" + bestScore + "]: [" + bestKey + "] = " + r + " yrs");
             return r;
         }
