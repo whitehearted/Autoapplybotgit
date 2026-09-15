@@ -824,7 +824,7 @@ public class AnswerEngine {
         boolean numericExpPhrase = q.contains("how many years") || q.contains("years of experience")
                 || q.contains("no. of years") || q.contains("no of years") || q.contains("number of years")
                 || q.contains("total experience");
-        boolean booleanQuestionStart = q.startsWith("do you") || q.startsWith("are you")
+            boolean booleanQuestionStart = q.startsWith("do you") || q.startsWith("are you")
                 || q.startsWith("have you") || q.startsWith("did you") || q.startsWith("is your")
                 || q.startsWith("were you") || q.startsWith("can you") || q.startsWith("will you");
 
@@ -832,6 +832,57 @@ public class AnswerEngine {
                 && !booleanQuestionStart)) {
             String exp = matchSkillExperience(q);
             return log(exp != null ? exp : "0");
+        }
+
+        // ============================================================
+// OVERALL EXPERIENCE STATUS
+// Example:
+// "Are you a fresher or experienced jobseeker?"
+// "Are you a fresher or an experienced candidate?"
+// ============================================================
+
+        if ((q.contains("fresher") && q.contains("experienced"))
+                || q.contains("fresher or experienced")
+                || q.contains("fresher/experienced")) {
+
+            String exp = profile.getExp();
+
+            if (exp == null || exp.isBlank()) {
+                System.out.println(
+                        "[AnswerEngine] Overall experience not available in profile."
+                );
+                return "";
+            }
+
+            try {
+                double years = Double.parseDouble(
+                        exp.replaceAll("[^0-9.]", "")
+                );
+
+                String answer = years > 0
+                        ? "Experienced"
+                        : "Fresher";
+
+                System.out.println(
+                        "[AnswerEngine] Overall experience = [" +
+                                exp +
+                                "] -> [" +
+                                answer +
+                                "]"
+                );
+
+                return answer;
+
+            } catch (NumberFormatException e) {
+
+                System.out.println(
+                        "[AnswerEngine] Could not parse profile experience: [" +
+                                exp +
+                                "]"
+                );
+
+                return "";
+            }
         }
 
         if (booleanQuestionStart && q.contains("experience")) {
