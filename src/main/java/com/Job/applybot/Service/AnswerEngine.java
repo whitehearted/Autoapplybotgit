@@ -948,8 +948,24 @@ public class AnswerEngine {
             return log(profile.getEmail());
         if (q.contains("current company") || q.contains("current organization") || q.contains("company name"))
             return log(nvl(profile.getCompany(), "Fresher"));
-        if (q.contains("designation at") || q.contains("your designation") || q.contains("designation"))
-            return log(nvl(profile.getDesignation(), "Fresher"));
+        // Previous / last job title
+        if (q.contains("previous job title")
+                || q.contains("previous designation")
+                || q.contains("last job title")
+                || q.contains("last designation")
+                || q.contains("prior job title")
+                || q.contains("prior designation")) {
+
+            return log(nvl(profile.getDesignation(), ""));
+        }
+        // Current job title / designation
+        if (q.contains("current job title")
+                || q.contains("current designation")
+                || q.contains("your designation")
+                || q.contains("designation")) {
+
+            return log(nvl(profile.getDesignation(), ""));
+        }
         if (q.contains("functional area"))
             return log("IT Software");
         if (q.contains("currently working") || q.contains("currently employed"))
