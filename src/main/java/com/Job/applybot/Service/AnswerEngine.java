@@ -824,7 +824,7 @@ public class AnswerEngine {
         boolean numericExpPhrase = q.contains("how many years") || q.contains("years of experience")
                 || q.contains("no. of years") || q.contains("no of years") || q.contains("number of years")
                 || q.contains("total experience");
-        boolean booleanQuestionStart = q.startsWith("do you") || q.startsWith("are you")
+            boolean booleanQuestionStart = q.startsWith("do you") || q.startsWith("are you")
                 || q.startsWith("have you") || q.startsWith("did you") || q.startsWith("is your")
                 || q.startsWith("were you") || q.startsWith("can you") || q.startsWith("will you");
 
@@ -832,6 +832,57 @@ public class AnswerEngine {
                 && !booleanQuestionStart)) {
             String exp = matchSkillExperience(q);
             return log(exp != null ? exp : "0");
+        }
+
+        // ============================================================
+// OVERALL EXPERIENCE STATUS
+// Example:
+// "Are you a fresher or experienced jobseeker?"
+// "Are you a fresher or an experienced candidate?"
+// ============================================================
+
+        if ((q.contains("fresher") && q.contains("experienced"))
+                || q.contains("fresher or experienced")
+                || q.contains("fresher/experienced")) {
+
+            String exp = profile.getExp();
+
+            if (exp == null || exp.isBlank()) {
+                System.out.println(
+                        "[AnswerEngine] Overall experience not available in profile."
+                );
+                return "";
+            }
+
+            try {
+                double years = Double.parseDouble(
+                        exp.replaceAll("[^0-9.]", "")
+                );
+
+                String answer = years > 0
+                        ? "Experienced"
+                        : "Fresher";
+
+                System.out.println(
+                        "[AnswerEngine] Overall experience = [" +
+                                exp +
+                                "] -> [" +
+                                answer +
+                                "]"
+                );
+
+                return answer;
+
+            } catch (NumberFormatException e) {
+
+                System.out.println(
+                        "[AnswerEngine] Could not parse profile experience: [" +
+                                exp +
+                                "]"
+                );
+
+                return "";
+            }
         }
 
         if (booleanQuestionStart && q.contains("experience")) {
@@ -897,8 +948,24 @@ public class AnswerEngine {
             return log(profile.getEmail());
         if (q.contains("current company") || q.contains("current organization") || q.contains("company name"))
             return log(nvl(profile.getCompany(), "Fresher"));
-        if (q.contains("designation at") || q.contains("your designation") || q.contains("designation"))
-            return log(nvl(profile.getDesignation(), "Fresher"));
+        // Previous / last job title
+        if (q.contains("previous job title")
+                || q.contains("previous designation")
+                || q.contains("last job title")
+                || q.contains("last designation")
+                || q.contains("prior job title")
+                || q.contains("prior designation")) {
+
+            return log(nvl(profile.getDesignation(), ""));
+        }
+        // Current job title / designation
+        if (q.contains("current job title")
+                || q.contains("current designation")
+                || q.contains("your designation")
+                || q.contains("designation")) {
+
+            return log(nvl(profile.getDesignation(), ""));
+        }
         if (q.contains("functional area"))
             return log("IT Software");
         if (q.contains("currently working") || q.contains("currently employed"))

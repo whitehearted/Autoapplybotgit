@@ -90,7 +90,7 @@ public class ChatBotHandler {
     private enum QCategory {
         EXPERIENCE, SALARY_CURRENT, SALARY_EXPECTED, NOTICE, PERSONAL,
         EDUCATION, LOCATION, SKILL_LIST, CERTIFICATION, AGREEMENT,
-        COMPANY, BOOLEAN_YES, BOOLEAN_NO, UNKNOWN
+        COMPANY, BOOLEAN_YES, BOOLEAN_NO, EXPERIENCE_STATUS, UNKNOWN
     }
 
     // ── Multi-turn memory ─────────────────────────────────────────────────────
@@ -197,6 +197,12 @@ public class ChatBotHandler {
     private static QCategory classifyQuestion(String q) {
         String ql = q.toLowerCase();
 
+        if ((ql.contains("fresher") && ql.contains("experienced"))
+                || ql.contains("fresher or experienced")
+                || ql.contains("fresher/experienced")) {
+
+            return QCategory.EXPERIENCE_STATUS;
+        }
         // Experience — must come before generic "have you" checks.
         // Only treat as NUMERIC (EXPERIENCE) when the phrasing actually asks for a number.
         // Boolean phrasing ("do you have experience in...", "are you experienced with...")
@@ -282,6 +288,9 @@ public class ChatBotHandler {
         String v = raw.trim();
 
         switch (category) {
+            case EXPERIENCE_STATUS:
+                return v;
+
             case EXPERIENCE:
                 // Strip "years", "yr", "+", trailing text — keep only the number
                 v = v.replaceAll("(?i)\\s*(years?|yrs?|\\+).*$", "").trim();
@@ -332,6 +341,40 @@ public class ChatBotHandler {
         if (chips.isEmpty()) return false;
 
         String[] chipTexts = readChipTexts(chips);
+
+        // ── Fresher / Experienced ─────────────────────────────────────
+        if (category == QCategory.EXPERIENCE_STATUS) {
+
+            String ans = answer.toLowerCase().trim();
+
+            for (int i = 0; i < chipTexts.length; i++) {
+
+                String chip = chipTexts[i].toLowerCase().trim();
+
+                if (ans.equals("experienced")
+                        && chip.contains("experienced")) {
+
+                    debug("Experience-status match: [" +
+                            chipTexts[i] + "]");
+
+                    return clickChipAt(driver, js, chips, i);
+                }
+
+                if (ans.equals("fresher")
+                        && chip.contains("fresher")) {
+
+                    debug("Experience-status match: [" +
+                            chipTexts[i] + "]");
+
+                    return clickChipAt(driver, js, chips, i);
+                }
+            }
+
+            debug("No Fresher/Experienced chip matched answer: [" +
+                    answer + "]");
+
+            return false;
+        }
 
         debug("Found " + chips.size() + " chip(s):");
         for (int i = 0; i < chipTexts.length; i++) debug("  chip[" + i + "]: [" + chipTexts[i] + "]");
